@@ -4,7 +4,7 @@
 // @grant       GM_getValue
 // @grant       GM_setValue
 // @version     1.0
-// @author      himekishi
+// @author      ojou-sama
 // @description image viewer, asmr.one webscript
 // ==/UserScript==
 
@@ -1044,10 +1044,13 @@
 
         if (workTree.dataset.navSetup === 'true') return true;
 
+        const workId = getWorkId();
+
+        // Don't setup if we're not on a work page
+        if (!workId) return false;
+
         workTree.id = 'work-tree-a';
         workTree.dataset.navSetup = 'true';
-
-        const workId = getWorkId();
 
         if (workId !== currentWorkId) {
             allImages = null;
@@ -1067,11 +1070,20 @@
                 e.preventDefault();
                 e.stopPropagation();
 
-                if (!allImages && currentWorkId) {
+                const currentPageWorkId = getWorkId();
+
+                if (!currentPageWorkId) {
+                    console.error('could not determine work ID');
+                    return;
+                }
+
+                // If work changed or allImages not loaded, fetch from API
+                if (!allImages || currentPageWorkId !== currentWorkId) {
                     try {
-                        console.log('fetching images from API (not cached)');
-                        const fileTree = await callApi(`tracks/${currentWorkId}`);
+                        console.log('fetching images from API (not cached or work changed)');
+                        const fileTree = await callApi(`tracks/${currentPageWorkId}`);
                         allImages = extractAllImages(sortFileTree(fileTree));
+                        currentWorkId = currentPageWorkId;
                         console.log('loaded', allImages.length, 'images');
                     } catch (err) {
                         console.error('failed to load images:', err);
@@ -1081,16 +1093,14 @@
 
                 const filename = listItem.querySelector('.q-item__label').textContent.trim();
 
-                const imagesToShow = allImages;
-
-                const adjustedIndex = imagesToShow.findIndex(img => img.filename === filename);
+                const adjustedIndex = allImages.findIndex(img => img.filename === filename);
 
                 if (adjustedIndex === -1) {
                     console.error('image not found in current scope');
                     return;
                 }
 
-                openImageViewer(imagesToShow, adjustedIndex);
+                openImageViewer(allImages, adjustedIndex);
             }
         };
 
@@ -1102,13 +1112,18 @@
     function observeWorkTree() {
         const observer = new MutationObserver(() => {
             const workTree = document.getElementById('work-tree');
-            if (workTree && !workTree.dataset.navSetup) {
+            // Only setup if work tree exists, not already set up, AND we're on a work page
+            if (workTree && !workTree.dataset.navSetup && getWorkId()) {
                 setupWorkTree();
             }
         });
 
         observer.observe(document.body, { childList: true, subtree: true });
-        setupWorkTree();
+
+        // Initial setup
+        if (getWorkId()) {
+            setupWorkTree();
+        }
     }
 
     // ========== initialization ==========
