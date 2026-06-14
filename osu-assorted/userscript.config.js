@@ -9,7 +9,7 @@ export default {
     description: "A collection of small scripts for osu! web.",
     match: [ "https://osu.ppy.sh/*" ],
     grant: [ "GM_addStyle", "GM_getValue", "GM_setValue", "GM_deleteValue" ],
-    connect: [ "assets.ppy.sh" ],
+    connect: [ "assets.ppy.sh", "b.ppy.sh" ],
     // include: [],
     // icon: "",
     // downloadURL: "",
