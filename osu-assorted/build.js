@@ -61,7 +61,7 @@ function makeHeader(extra = {}) {
     grants,
     connects,
     includes,
-    '// ==/UserScript==,',
+    '// ==/UserScript==',
   ].filter(Boolean).join('\n');
 }
 
