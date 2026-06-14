@@ -8,7 +8,7 @@ export const revertRankColors = {
         --colour: inherit !important;
         color: var(--value-color);
         font-weight: 300;
-      }   
+      }
     `);
   }
 }
