@@ -61,8 +61,7 @@ function makeHeader(extra = {}) {
     grants,
     connects,
     includes,
-    extra.require    ? `// @require     ${extra.require}`    : null,
-    '// ==/UserScript==',
+    '// ==/UserScript==,',
   ].filter(Boolean).join('\n');
 }
 
@@ -120,18 +119,6 @@ function build() {
     const hmrSnippet = HMR_MODE === 'polling' ? POLL_SNIPPET : WS_SNIPPET;
     const devBundle  = makeHeader() + '\n\n' + bundled + '\n\n' + hmrSnippet;
     writeFileSync(output, devBundle, 'utf-8');
-
-    // dev.user.js helper file
-    const scriptFile  = basename(output);
-    const devStubPath = join(dirname(output), 'dev.user.js');
-    writeFileSync(
-      devStubPath,
-      makeHeader({
-        nameSuffix: ' (dev)',
-        require: `http://localhost:${PORT}/${scriptFile}`,
-      }) + '\n',
-      'utf-8'
-    );
   } else {
     // production
     writeFileSync(output, makeHeader() + '\n\n' + bundled, 'utf-8');
@@ -157,7 +144,7 @@ if (!DEV) {
 build();
 console.log(`[kit] Watching ${dirname(entry)}`);
 console.log(`[kit] Dev server @ http://localhost:${PORT}`);
-console.log(`[kit] Install dist/dev.user.js in your monkey if you have not already.\n`);
+// console.log(`[kit] Be sure to enable "Track external edits."\n`);
 
 // websocket clients
 const wsClients  = new Set();
