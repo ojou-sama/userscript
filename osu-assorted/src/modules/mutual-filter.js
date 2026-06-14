@@ -5,6 +5,7 @@ export const mutualFilter = {
   // Unique ID used for settings persistence
   id: 'mutualFilter',
   name: 'Mutual Filter',
+  description: 'Adds a "Mutual" filter to the friends page.',
 
   init() {
     router.onNavigate('/home/friends', () => this.run());

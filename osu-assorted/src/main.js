@@ -1,4 +1,5 @@
 import { router } from "./core/router.js";
+import { settings } from "./core/settings.js";
 import * as modules from "./modules/index.js";
 
 const _modules = Object.values(modules);
@@ -10,3 +11,6 @@ const _modules = Object.values(modules);
 
 // init all modules
 _modules.forEach(m => m.init());
+
+// create settings UI
+settings.createSettingsUI();

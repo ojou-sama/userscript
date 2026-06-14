@@ -1,6 +1,7 @@
-export const revertRankColors = {
-  id: 'revertRankColors',
-  name: 'Revert Rank Colors',
+export const hideRankColors = {
+  id: 'hideRankColors',
+  name: 'Hide Rank Colors',
+  description: 'Hide rank colors and styles on profile pages.',
 
   init() {
     GM_addStyle(`

@@ -1,6 +1,7 @@
-export const revertFallbackBg = {
-  id: 'revertFallbackBg',
-  name: 'Revert Fallback Background',
+export const useOldFallbackBackground = {
+  id: 'useOldFallbackBackground',
+  name: 'Use Old Fallback Background',
+  description: 'Uses the old fallback background (rather than the new color gradients).',
 
   init() {
     GM_addStyle(`

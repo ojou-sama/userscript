@@ -1,3 +1,4 @@
+export { hideRankColors } from "./hide-rank-colors.js";
 export { mutualFilter } from "./mutual-filter.js";
-export { revertFallbackBg } from "./revert-fallback-bg.js";
-export { revertRankColors } from "./revert-rank-colors.js";
+export { useOldFallbackBackground } from "./use-old-fallback-background.js";
+export { useThumbnailFallback } from "./use-thumbnail-fallback.js";
