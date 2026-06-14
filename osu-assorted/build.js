@@ -10,7 +10,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync, watch }
 import { execSync } from 'child_process';
 import { createServer } from 'http';
 import { join, dirname, basename } from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 import { createHash } from 'crypto';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -21,14 +21,14 @@ const PORT      = 4532;
 
 let config;
 try {
-  config = (await import(join(__dirname, 'userscript.config.js'))).default;
+  config = (await import(pathToFileURL(join(__dirname, 'userscript.config.js')).href)).default;
 } catch {
   console.error('[kit] ERROR: Could not load userscript.config.js');
   process.exit(1);
 }
 
 const { entry, output, meta, devMode = {} } = config;
-const HMR_MODE  = devMode.hmr      ?? 'websocket'; // 'websocket' | 'polling'
+const HMR_MODE  = devMode.hmr ?? 'websocket'; // 'websocket' | 'polling'
 const RELOAD_ALL = devMode.reloadAll ?? true;
 
 // create header
@@ -148,7 +148,7 @@ function build() {
 
 if (!DEV) {
   const ok = build();
-  console.log(ok ? `[kit] Built → ${output}` : '[kit] Build failed.');
+  console.log(ok ? `[kit] Built: ${output}` : '[kit] Build failed.');
   process.exit(ok ? 0 : 1);
 }
 
@@ -156,8 +156,8 @@ if (!DEV) {
 
 build();
 console.log(`[kit] Watching ${dirname(entry)}`);
-console.log(`[kit] Dev server → http://localhost:${PORT}`);
-console.log(`[kit] Install dist/dev.user.js in your monkey once, then forget it.\n`);
+console.log(`[kit] Dev server @ http://localhost:${PORT}`);
+console.log(`[kit] Install dist/dev.user.js in your monkey if you have not already.\n`);
 
 // websocket clients
 const wsClients  = new Set();
@@ -211,7 +211,9 @@ const server = createServer((req, res) => {
     const content = readFileSync(filepath, 'utf-8');
     res.writeHead(200, {
       'Content-Type': 'application/javascript',
-      'Cache-Control': 'no-store',
+      'Cache-Control': 'no-store, no-cache, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0',
       'Access-Control-Allow-Origin': '*',
     });
     res.end(content);
@@ -244,9 +246,9 @@ watch(dirname(entry), { recursive: true }, (_, filename) => {
   rebuildTimer = setTimeout(() => {
     const ok = build();
     if (ok) {
-      process.stdout.write(`[kit] Rebuilt (${filename}) `);
+      process.stdout.write(`[kit] Rebuilt (${filename})`);
       sendReload();
-      console.log(`→ reload sent (hash: ${buildHash})`);
+      console.log(`... reload sent (hash: ${buildHash})`);
     }
   }, 50);
 });
