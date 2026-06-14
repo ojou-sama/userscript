@@ -1,4 +1,4 @@
-import router from "./core/router.js";
+import { router } from "./core/router.js";
 import * as modules from "./modules/index.js";
 
 const _modules = Object.values(modules);
