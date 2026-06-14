@@ -22,7 +22,6 @@
   var _handlers = [];
   var _lastPath = location.pathname;
   var _dispatchedPath = location.pathname;
-  var _debounce;
   function matchPattern(pattern, path) {
     const re = new RegExp("^" + pattern.replace(/\*/g, ".*") + "$");
     return re.test(path);
@@ -45,15 +44,6 @@
     dispatch(location.pathname);
   };
   window.addEventListener("popstate", () => dispatch(location.pathname));
-  new MutationObserver(() => {
-    clearTimeout(_debounce);
-    _debounce = setTimeout(() => {
-      if (location.pathname !== _lastPath) {
-        _lastPath = location.pathname;
-        dispatch(_lastPath);
-      }
-    }, 50);
-  }).observe(document.body, { childList: true, subtree: true });
   var router = {
     /**
      * Register a callback for a URL pattern.
@@ -63,6 +53,9 @@
      */
     onNavigate(pattern, cb) {
       _handlers.push({ pattern, cb });
+      if (matchPattern(pattern, location.pathname)) {
+        cb(location.pathname);
+      }
     }
   };
 

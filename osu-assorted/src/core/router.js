@@ -38,15 +38,15 @@ history.replaceState = function (...args) {
 window.addEventListener("popstate", () => dispatch(location.pathname));
 
 // observe DOM changes to catch client-side navigation that doesn't use pushState
-new MutationObserver(() => {
-  clearTimeout(_debounce);
-  _debounce = setTimeout(() => {
-    if (location.pathname !== _lastPath) {
-      _lastPath = location.pathname;
-      dispatch(_lastPath);
-    }
-  }, 50);
-}).observe(document.body, { childList: true, subtree: true });
+// new MutationObserver(() => {
+//   clearTimeout(_debounce);
+//   _debounce = setTimeout(() => {
+//     if (location.pathname !== _lastPath) {
+//       _lastPath = location.pathname;
+//       dispatch(_lastPath);
+//     }
+//   }, 50);
+// }).observe(document.documentElement, { childList: true, subtree: true });
 
 export const router = {
   /**
@@ -57,5 +57,8 @@ export const router = {
    */
   onNavigate(pattern, cb) {
     _handlers.push({ pattern, cb });
+    if (matchPattern(pattern, location.pathname)) {
+      cb(location.pathname);
+    }
   },
 };
