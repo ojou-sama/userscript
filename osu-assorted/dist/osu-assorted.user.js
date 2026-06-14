@@ -101,18 +101,29 @@
     async run() {
       try {
         const allBtn = await waitForElement('.update-streams-v2__container [data-key="all"]');
-        log(this.id, "FUCK!");
         const container = allBtn.closest(".update-streams-v2__container");
         if (!allBtn || container.querySelector('[data-key="mutual"]')) return;
-        const mutualBtn = allBtn.cloneNode(true);
-        mutualBtn.setAttribute("data-key", "mutual");
-        mutualBtn.setAttribute("href", "#");
-        mutualBtn.classList.remove("update-streams-v2__item--active");
-        const nameNode = mutualBtn.querySelector(".update-streams-v2__row--name");
-        if (nameNode) nameNode.textContent = "Mutual";
+        allBtn.insertAdjacentHTML("afterend", `
+        <a class="update-streams-v2__item t-changelog-stream--all" data-key="mutual" href="#">
+          <div class="update-streams-v2__bar u-changelog-stream--bg" style="background-color: hsl(var(--hsl-pink-2));"></div>
+          <p class="update-streams-v2__row update-streams-v2__row--name">Mutual</p>
+          <p class="update-streams-v2__row update-streams-v2__row--version">-</p>
+        </a>
+      `);
+        const mutualBtn = container.querySelector('[data-key="mutual"]');
         const countNode = mutualBtn.querySelector(".update-streams-v2__row--version");
-        if (countNode) countNode.textContent = `(${container.querySelectorAll(".user-card-brick--mutual").length})`;
-        allBtn.after(mutualBtn);
+        let attempts = 0;
+        const countInterval = setInterval(() => {
+          attempts++;
+          const cardsExist = document.querySelector(".user-card, .user-card-brick");
+          if (cardsExist) {
+            clearInterval(countInterval);
+            const mutuals = document.querySelectorAll(".user-card-brick--mutual, .user-card:has(.fa-user-friends)");
+            if (countNode) countNode.textContent = mutuals.length.toString();
+          } else if (attempts > 50) {
+            clearInterval(countInterval);
+          }
+        }, 100);
         if (!document.getElementById("mutual-filter-styles")) {
           const style = GM_addStyle(`
           .show-only-mutual .user-card-brick:not(.user-card-brick--mutual) {
@@ -143,14 +154,14 @@
         otherBtns.forEach((btn) => {
           btn.addEventListener("click", () => {
             document.body.classList.remove("show-only-mutual");
+            mutualBtn.classList.remove("update-streams-v2__item--active");
+            btn.classList.add("update-streams-v2__item--active");
           });
         });
       } catch (e) {
         log(this.id, "error:", e);
       }
     }
-    //   cleanup() {
-    //   },
   };
 
   // src/modules/revert-fallback-bg.js
