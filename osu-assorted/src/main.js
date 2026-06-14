@@ -1,4 +1,5 @@
 import { beatmapsetData } from "./core/beatmapset-data.js";
+import { panelManager } from "./core/panel-manager.js";
 import { router } from "./core/router.js";
 import { settings } from "./core/settings.js";
 import * as modules from "./modules/index.js";
@@ -13,6 +14,7 @@ const _modules = Object.values(modules);
 // init all modules
 _modules.forEach(m => m.init());
 beatmapsetData.init();
+panelManager.init();
 
 // create settings UI
 settings.createSettingsUI();

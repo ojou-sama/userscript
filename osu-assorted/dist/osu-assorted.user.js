@@ -106,6 +106,44 @@
     }
   };
 
+  // src/core/panel-manager.js
+  var handlers = [];
+  var moDebounceId = 0;
+  var scheduleToken = 0;
+  var CHUNK_SIZE = 28;
+  var scheduleAllPanels = () => {
+    const panels = Array.from(document.querySelectorAll(".beatmapset-panel"));
+    if (panels.length === 0) return;
+    const token = ++scheduleToken;
+    let index = 0;
+    const step = () => {
+      if (token !== scheduleToken) return;
+      const end = Math.min(index + CHUNK_SIZE, panels.length);
+      while (index < end) {
+        const panel = panels[index++];
+        handlers.forEach((handler) => handler(panel));
+      }
+      if (index < panels.length) {
+        requestAnimationFrame(step);
+      }
+    };
+    requestAnimationFrame(step);
+  };
+  var scheduleFromMutation = () => {
+    clearTimeout(moDebounceId);
+    moDebounceId = setTimeout(scheduleAllPanels, 100);
+  };
+  var panelManager = {
+    init() {
+      scheduleAllPanels();
+      const observer = new MutationObserver(scheduleFromMutation);
+      observer.observe(document.documentElement, { childList: true, subtree: true });
+    },
+    register(handler) {
+      handlers.push(handler);
+    }
+  };
+
   // src/core/settings.js
   function _read(key) {
     try {
@@ -267,9 +305,10 @@
     name: "Use Thumbnail Fallback",
     description: "Attempts to use the mapset thumbnail as a fallback image if the default background does not exist.",
     init() {
-      router.onNavigate("/beatmapsets/*", () => this.run());
+      router.onNavigate("/beatmapsets/*", () => this.runOnSetPage());
+      panelManager.register((panel) => this.processPanel(panel));
     },
-    async run() {
+    async runOnSetPage() {
       const cover = await waitForElement(".beatmapset-header__cover .beatmapset-cover");
       if (!cover) return;
       const style = getComputedStyle(cover);
@@ -277,33 +316,26 @@
         const match = location.pathname.match(/\/beatmapsets\/(\d+)/);
         if (!match) return;
         const setId = match[1];
-        console.log(setId);
         setId && cover.style.setProperty("--bg", `url(https://b.ppy.sh/thumb/${setId}l.jpg)`);
       }
+    },
+    processPanel(panel) {
+      const linkEl = panel.querySelector('a[href*="/beatmapsets/"]');
+      const match = linkEl.getAttribute("href").match(/\/beatmapsets\/(\d+)/);
+      const setId = match[1];
+      const covers = panel.querySelectorAll(".beatmapset-cover");
+      const currentBg = covers[0]?.style.getPropertyValue("--bg") || "";
+      if (currentBg.includes(`/thumb/`) || currentBg.includes("url(") && !currentBg.includes("var(")) return;
+      covers[0]?.style.setProperty("--bg", `url("https://b.ppy.sh/thumb/${setId}l.jpg")`, "important");
+      covers[1]?.style.setProperty("--bg", `url("https://b.ppy.sh/thumb/${setId}l.jpg")`, "important");
     }
-    // async run() {
-    //   try {
-    //     const set = await beatmapsetData.get();
-    //     if (!set || !set.id) return;
-    //     console.log('Found beatmapset ID:', set.id);
-    //     if (!document.getElementById('thumbnail-fallback-styles')) {
-    //       const style = GM_addStyle(`
-    //         .beatmapset-cover:not([style*="--bg"]) {
-    //           --bg: url("https://b.ppy.sh/thumb/${set.id}l.jpg") !important;
-    //         }
-    //       `);
-    //       style.id = 'thumbnail-fallback-styles';
-    //     }
-    //   } catch (e) {
-    //     console.error('[Thumbnail Fallback] Error:', e);
-    //   }
-    // }
   };
 
   // src/main.js
   var _modules = Object.values(modules_exports);
   _modules.forEach((m) => m.init());
   beatmapsetData.init();
+  panelManager.init();
   settings.createSettingsUI();
 })();
 

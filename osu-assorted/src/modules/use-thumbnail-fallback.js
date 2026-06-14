@@ -1,4 +1,5 @@
 // import { beatmapsetData } from '../core/beatmapset-data';
+import { panelManager } from '../core/panel-manager';
 import { router } from '../core/router';
 import { waitForElement } from '../core/utils';
 
@@ -8,10 +9,11 @@ export const useThumbnailFallback = {
   description: 'Attempts to use the mapset thumbnail as a fallback image if the default background does not exist.',
 
   init() {
-    router.onNavigate('/beatmapsets/*', () => this.run());
+    router.onNavigate('/beatmapsets/*', () => this.runOnSetPage());
+    panelManager.register(panel => this.processPanel(panel));
   },
 
-  async run() {
+  async runOnSetPage() {
     const cover = await waitForElement('.beatmapset-header__cover .beatmapset-cover');
     if (!cover) return;
     const style = getComputedStyle(cover);
@@ -21,25 +23,24 @@ export const useThumbnailFallback = {
       const setId = match[1];
       setId && cover.style.setProperty('--bg', `url(https://b.ppy.sh/thumb/${setId}l.jpg)`);
     }
+  },
+
+processPanel(panel) {
+    // grab set id
+    const linkEl = panel.querySelector('a[href*="/beatmapsets/"]');
+    const match = linkEl.getAttribute('href').match(/\/beatmapsets\/(\d+)/);
+    const setId = match[1];
+
+    // grab cover
+    const covers = panel.querySelectorAll('.beatmapset-cover');
+
+    // skip if the cover is already set goodly
+    const currentBg = covers[0]?.style.getPropertyValue('--bg') || '';
+    if (currentBg.includes(`/thumb/`) 
+      || (currentBg.includes('url(') && !currentBg.includes('var('))) return;
+
+    // use thumbnail fallback
+    covers[0]?.style.setProperty('--bg', `url("https://b.ppy.sh/thumb/${setId}l.jpg")`, 'important');
+    covers[1]?.style.setProperty('--bg', `url("https://b.ppy.sh/thumb/${setId}l.jpg")`, 'important');
   }
-
-  // async run() {
-  //   try {
-  //     const set = await beatmapsetData.get();
-  //     if (!set || !set.id) return;
-
-  //     console.log('Found beatmapset ID:', set.id);
-
-  //     if (!document.getElementById('thumbnail-fallback-styles')) {
-  //       const style = GM_addStyle(`
-  //         .beatmapset-cover:not([style*="--bg"]) {
-  //           --bg: url("https://b.ppy.sh/thumb/${set.id}l.jpg") !important;
-  //         }
-  //       `);
-  //       style.id = 'thumbnail-fallback-styles';
-  //     }
-  //   } catch (e) {
-  //     console.error('[Thumbnail Fallback] Error:', e);
-  //   }
-  // }
 }
