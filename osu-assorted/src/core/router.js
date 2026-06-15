@@ -49,12 +49,6 @@ window.addEventListener("popstate", () => dispatch(location.pathname));
 // }).observe(document.documentElement, { childList: true, subtree: true });
 
 export const router = {
-  /**
-   * Register a callback for a URL pattern.
-   * Pattern supports glob-style wildcards: '/users/*', '*'
-   * @param {string}   pattern
-   * @param {function} cb  - called with the matched path string
-   */
   onNavigate(pattern, cb) {
     _handlers.push({ pattern, cb });
     if (matchPattern(pattern, location.pathname)) {

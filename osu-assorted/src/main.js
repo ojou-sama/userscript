@@ -11,10 +11,14 @@ const _modules = Object.values(modules);
 //   // do some cleanup 
 // });
 
-// init all modules
-_modules.forEach(m => m.init());
+// init core stuff
 beatmapsetData.init();
 panelManager.init();
 
-// create settings UI
-settings.createSettingsUI();
+// init modules
+settings.createSettingsUI(_modules);
+_modules.forEach(m => {
+  if (settings.isEnabled(m.id)) {
+    m.init();
+  }
+});
