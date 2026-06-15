@@ -6,7 +6,7 @@ import { waitForElement } from '../core/utils';
 export const useThumbnailFallback = {
   id: 'useThumbnailFallback',
   name: 'Use Thumbnail Fallback',
-  description: 'Attempts to use the mapset thumbnail as a fallback image if the default background does not exist.',
+  description: 'Attempts to use mapset thumbnail as a fallback image if the background does not exist.',
 
   init() {
     router.onNavigate('/beatmapsets/*', () => this.runOnSetPage());
