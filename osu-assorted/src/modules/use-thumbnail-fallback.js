@@ -25,7 +25,7 @@ export const useThumbnailFallback = {
     }
   },
 
-processPanel(panel) {
+  processPanel(panel) {
     // grab set id
     const linkEl = panel.querySelector('a[href*="/beatmapsets/"]');
     const match = linkEl.getAttribute('href').match(/\/beatmapsets\/(\d+)/);

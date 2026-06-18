@@ -61,8 +61,8 @@ export const settings = {
       #oa-fab:hover { transform: scale(1.05); background: hsl(var(--hsl-pink-2)); }
       
       #oa-backdrop {
-        position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 10000;
-        display: none; align-items: center; justify-content: center; backdrop-filter: blur(4px);
+        position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 10000;
+        display: none; align-items: center; justify-content: center;
       }
       #oa-backdrop.oa-open { display: flex; }
       
@@ -79,6 +79,10 @@ export const settings = {
       }
       #oa-modal .account-edit-entry__label {
         width: 48px !important;
+      }
+      
+      #oa-modal .oa-module-settings .account-edit-entry__label {
+        width: 72px !important;
       }
 
       #oa-modal .osu-page {
@@ -135,7 +139,7 @@ export const settings = {
                   <ul class="header-nav-v4 header-nav-v4--list">
                     <li class="header-nav-v4__item">
                       <span class="header-nav-v4__link header-nav-v4__link--active" style="cursor: default;">
-                        <span class="fake-bold">osu! assorted settings</span>
+                        <span class="fake-bold">osu! assorted</span>
                       </span>
                     </li>
                   </ul>

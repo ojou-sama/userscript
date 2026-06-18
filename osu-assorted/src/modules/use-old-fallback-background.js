@@ -1,7 +1,7 @@
 export const useOldFallbackBackground = {
   id: 'useOldFallbackBackground',
   name: 'Use Old Fallback Background',
-  description: 'Uses the old fallback background (rather than the new color gradients).',
+  description: 'Uses the old gray fallback background (rather than the new color gradients).',
 
   init() {
     GM_addStyle(`
