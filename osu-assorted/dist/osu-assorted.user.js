@@ -8,6 +8,7 @@
 // @grant       GM_getValue
 // @grant       GM_setValue
 // @grant       GM_deleteValue
+// @grant       GM_xmlhttpRequest
 // @connect     assets.ppy.sh
 // @connect     b.ppy.sh
 // ==/UserScript==
@@ -100,41 +101,50 @@
     }
   };
 
-  // src/core/panel-manager.js
-  var handlers = [];
+  // src/core/element-manager.js
+  var registries = /* @__PURE__ */ new Map();
+  var processed = /* @__PURE__ */ new WeakSet();
   var moDebounceId = 0;
   var scheduleToken = 0;
   var CHUNK_SIZE = 28;
-  var scheduleAllPanels = () => {
-    const panels = Array.from(document.querySelectorAll(".beatmapset-panel"));
-    if (panels.length === 0) return;
+  var scheduleAllElements = () => {
     const token = ++scheduleToken;
-    let index = 0;
-    const step = () => {
-      if (token !== scheduleToken) return;
-      const end = Math.min(index + CHUNK_SIZE, panels.length);
-      while (index < end) {
-        const panel = panels[index++];
-        handlers.forEach((handler) => handler(panel));
-      }
-      if (index < panels.length) {
-        requestAnimationFrame(step);
-      }
-    };
-    requestAnimationFrame(step);
+    for (const [selector, handlers] of registries.entries()) {
+      const elements = Array.from(document.querySelectorAll(selector)).filter((el) => !processed.has(el));
+      if (elements.length === 0) continue;
+      let index = 0;
+      const step = () => {
+        if (token !== scheduleToken) return;
+        const end = Math.min(index + CHUNK_SIZE, elements.length);
+        while (index < end) {
+          const el = elements[index++];
+          processed.add(el);
+          handlers.forEach((handler) => handler(el));
+        }
+        if (index < elements.length) {
+          requestAnimationFrame(step);
+        }
+      };
+      requestAnimationFrame(step);
+    }
   };
   var scheduleFromMutation = () => {
     clearTimeout(moDebounceId);
-    moDebounceId = setTimeout(scheduleAllPanels, 100);
+    moDebounceId = setTimeout(scheduleAllElements, 100);
   };
-  var panelManager = {
+  var elementManager = {
     init() {
-      scheduleAllPanels();
+      scheduleAllElements();
       const observer = new MutationObserver(scheduleFromMutation);
       observer.observe(document.documentElement, { childList: true, subtree: true });
     },
-    register(handler) {
-      handlers.push(handler);
+    // usage: elementManager.register('.beatmapset-panel', (panel) => { ... });
+    register(selector, handler) {
+      if (!registries.has(selector)) {
+        registries.set(selector, []);
+      }
+      registries.get(selector).push(handler);
+      scheduleAllElements();
     }
   };
 
@@ -155,6 +165,7 @@
       console.error("[settings] GM_setValue unavailable, unable to write settings");
     }
   }
+  var callbacks = /* @__PURE__ */ new Map();
   var settings = {
     isEnabled(moduleId) {
       const val = _read(`module__${moduleId}`);
@@ -162,6 +173,7 @@
     },
     setEnabled(moduleId, enabled) {
       _write(`module__${moduleId}`, enabled);
+      this._emit(moduleId);
     },
     get(key, defaultValue) {
       const val = _read(key);
@@ -175,12 +187,32 @@
     },
     setModuleSetting(moduleId, settingId, value) {
       this.set(`module__${moduleId}__${settingId}`, value);
+      this._emit(moduleId);
     },
-    createSettingsUI(modules = []) {
+    onChange(moduleId, callback) {
+      if (!callbacks.has(moduleId)) callbacks.set(moduleId, []);
+      callbacks.get(moduleId).push(callback);
+    },
+    _emit(moduleId) {
+      if (callbacks.has(moduleId)) {
+        callbacks.get(moduleId).forEach((cb) => cb());
+      }
+    }
+  };
+
+  // src/core/settings-ui.js
+  var settingsUI = {
+    create(modules = []) {
       if (document.getElementById("oa-wrapper")) return;
       GM_addStyle(`
+      #oa-wrapper {
+        position: fixed; inset: 0; pointer-events: none; z-index: 99999;
+      }
+      
+      #oa-fab, #oa-backdrop { pointer-events: auto; }
+
       #oa-fab {
-        position: fixed; bottom: 24px; left: 24px; z-index: 9999;
+        position: absolute; bottom: 24px; left: 24px;
         width: 48px; height: 48px; border-radius: 50%;
         background: hsl(var(--hsl-pink)); color: #fff; border: none; cursor: pointer;
         display: flex; align-items: center; justify-content: center; font-size: 20px;
@@ -189,7 +221,7 @@
       #oa-fab:hover { transform: scale(1.05); background: hsl(var(--hsl-pink-2)); }
       
       #oa-backdrop {
-        position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 10000;
+        position: absolute; inset: 0; background: rgba(0,0,0,0.6);
         display: none; align-items: center; justify-content: center;
       }
       #oa-backdrop.oa-open { display: flex; }
@@ -197,40 +229,27 @@
       #oa-modal {
         width: 828px; max-width: 95vw; max-height: 85vh; 
         background: hsl(var(--hsl-b6)); border-radius: 12px;
-        // box-shadow: 0 10px 40px rgba(0,0,0,0.6);
-        display: flex; flex-direction: column; overflow: hidden;
-        margin: 0;
+        display: flex; flex-direction: column; overflow: hidden; margin: 0;
       }
 
-      #oa-modal .account-edit-entry--no-label {
-        padding-left: 48px !important;
+      #oa-content { 
+        overflow-y: auto; flex: 1 1 auto; min-height: 0; 
+        overflow-x: hidden; margin: 0;
       }
-      #oa-modal .account-edit-entry__label {
-        width: 48px !important;
-      }
+      #oa-content::-webkit-scrollbar { width: 4px; }
+      #oa-content::-webkit-scrollbar-track { background: transparent; }
+      #oa-content::-webkit-scrollbar-thumb { background: hsl(var(--hsl-b4)); border-radius: 4px; }
+      #oa-content::-webkit-scrollbar-thumb:hover { background: hsl(var(--hsl-b3)); }
+
+      #oa-content { scrollbar-width: none; }
       
-      #oa-modal .oa-module-settings .account-edit-entry__label {
-        width: 72px !important;
-      }
-
-      #oa-modal .osu-page {
-        width: 100% !important;
-      }
-
-      #oa-modal .header-v4__content {
-        width: 100% !important;
-      }
-
-      #oa-modal .account-edit__section {
-        width: 160px;
-        padding-left: 20px !important;
-      }
-
-      #oa-modal .header-v4__row {
-        padding: 0 20px !important;
-      }
-      
-      #oa-content { overflow-y: auto; flex-grow: 1; overflow-x: hidden; margin: 0; }
+      #oa-modal .account-edit-entry--no-label { padding-left: 48px !important; }
+      #oa-modal .account-edit-entry__label { width: 48px !important; }
+      #oa-modal .oa-module-settings .account-edit-entry__label { width: 72px !important; }
+      #oa-modal .osu-page { width: 100% !important; }
+      #oa-modal .header-v4__content { width: 100% !important; }
+      #oa-modal .account-edit__section { width: 160px; padding-left: 20px !important; }
+      #oa-modal .header-v4__row { padding: 0 20px !important; }
       
       .oa-input-wrapper { width: 100%; min-width: 0; }
       .oa-input-wrapper .account-edit-entry { width: 100%; box-sizing: border-box; }
@@ -242,15 +261,8 @@
       }
       #oa-close:hover { opacity: 1; }
 
-      .oa-module-settings {
-        border-left: 2px solid hsl(var(--hsl-b5));
-        margin-left: 56px;
-        margin-bottom: 10px;
-      }
-
-      #oa-modal .oa-module-settings .account-edit-entry {
-        padding: 4px 16px !important;
-      }
+      .oa-module-settings { border-left: 2px solid hsl(var(--hsl-b5)); margin-left: 56px; margin-bottom: 10px; }
+      #oa-modal .oa-module-settings .account-edit-entry { padding: 4px 16px !important; }
     `);
       const wrapper = document.createElement("div");
       wrapper.id = "oa-wrapper";
@@ -258,32 +270,24 @@
       <button id="oa-fab" title="osu! assorted settings"><i class="fas fa-cog"></i></button>
       <div id="oa-backdrop">
         <div id="oa-modal">
-          
-          <div class="header-v4 header-v4--settings" style="margin: 0; border-radius: 12px 12px 0 0;">
-            <div class="header-v4__container">
-              <div class="header-v4__content">
-                <div class="header-v4__row header-v4__row--bar" style="justify-content: space-between;">
-                  <ul class="header-nav-v4 header-nav-v4--list">
-                    <li class="header-nav-v4__item">
-                      <span class="header-nav-v4__link header-nav-v4__link--active" style="cursor: default;">
-                        <span class="fake-bold">osu! assorted</span>
-                      </span>
-                    </li>
-                  </ul>
-                  <button id="oa-close" title="Close"><i class="fas fa-times"></i></button>
-                </div>
+          <div class="header-v4 header-v4--settings" style="margin: 0; border-radius: 12px 12px 0 0; flex-shrink: 0;">
+            <div class="header-v4__container"><div class="header-v4__content">
+              <div class="header-v4__row header-v4__row--bar" style="justify-content: space-between;">
+                <ul class="header-nav-v4 header-nav-v4--list">
+                  <li class="header-nav-v4__item">
+                    <span class="header-nav-v4__link header-nav-v4__link--active" style="cursor: default;"><span class="fake-bold">osu! assorted</span></span>
+                  </li>
+                </ul>
+                <button id="oa-close" title="Close"><i class="fas fa-times"></i></button>
               </div>
-            </div>
+            </div></div>
           </div>
-
           <div class="osu-page osu-page--account-edit" id="oa-content" style="background: transparent;"></div>
         </div>
       </div>
     `;
       const attachToDOM = () => {
-        if (!document.body.contains(wrapper)) {
-          document.body.appendChild(wrapper);
-        }
+        if (!document.body.contains(wrapper)) document.body.appendChild(wrapper);
       };
       setInterval(attachToDOM, 500);
       const backdrop = wrapper.querySelector("#oa-backdrop");
@@ -297,46 +301,79 @@
         buildSection(title, isFirst = false) {
           const section = document.createElement("div");
           section.className = `account-edit ${isFirst ? "account-edit--first" : ""}`;
-          section.innerHTML = `
-          <div class="account-edit__section"><h2 class="account-edit__section-title">${title}</h2></div>
-          <div class="account-edit__input-groups"><div class="account-edit__input-group"></div></div>
-        `;
+          section.innerHTML = `<div class="account-edit__section"><h2 class="account-edit__section-title">${title}</h2></div><div class="account-edit__input-groups"><div class="account-edit__input-group"></div></div>`;
           return { section, group: section.querySelector(".account-edit__input-group") };
         },
         buildToggle(label, desc, isChecked, onChange) {
           const div = document.createElement("div");
           div.className = "account-edit-entry account-edit-entry--no-label";
-          div.innerHTML = `
-          <label class="account-edit-entry__checkbox">
-            <div class="osu-switch-v2">
-              <input class="osu-switch-v2__input" type="checkbox" ${isChecked ? "checked" : ""}>
-              <span class="osu-switch-v2__content"></span>
-            </div>
-            <span class="account-edit-entry__checkbox-label" style="display: flex; flex-direction: column;">
-              <span style="font-weight: 600;">${label}</span>
-              ${desc ? `<span style="font-size: 12px; color: hsl(var(--hsl-c1)); font-weight: normal; margin-top: 4px; line-height: 1.4;">${desc}</span>` : ""}
-            </span>
-          </label>
-        `;
+          div.innerHTML = `<label class="account-edit-entry__checkbox"><div class="osu-switch-v2"><input class="osu-switch-v2__input" type="checkbox" ${isChecked ? "checked" : ""}><span class="osu-switch-v2__content"></span></div><span class="account-edit-entry__checkbox-label" style="display: flex; flex-direction: column;"><span style="font-weight: 600;">${label}</span>${desc ? `<span style="font-size: 12px; color: hsl(var(--hsl-c1)); font-weight: normal; margin-top: 4px; line-height: 1.4;">${desc}</span>` : ""}</span></label>`;
           div.querySelector("input").addEventListener("change", (e) => onChange(e.target.checked));
           return div;
         },
         buildInput(label, type, val, placeholder, onChange) {
           const div = document.createElement("div");
           div.className = "account-edit-entry oa-input-wrapper";
-          div.innerHTML = `
-          <input class="account-edit-entry__input" type="${type}" value="${val || ""}" placeholder=" ">
-          <div class="account-edit-entry__label">${label}</div>
-        `;
+          div.innerHTML = `<input class="account-edit-entry__input" type="${type}" value="${val || ""}" placeholder=" "><div class="account-edit-entry__label">${label}</div>`;
           const inputEl = div.querySelector("input");
           if (placeholder) inputEl.placeholder = placeholder;
           inputEl.addEventListener("input", (e) => onChange(e.target.value));
           return div;
+        },
+        buildSelect(label, options, val, onChange) {
+          const div = document.createElement("div");
+          div.className = "account-edit-entry oa-input-wrapper";
+          const optionsHtml = options.map((opt) => `<option value="${opt.value}" ${opt.value == val ? "selected" : ""} style="background: hsl(var(--hsl-b6)); color: white;">${opt.label}</option>`).join("");
+          div.innerHTML = `<select class="account-edit-entry__input" style="appearance: auto; padding-right: 20px;">${optionsHtml}</select><div class="account-edit-entry__label">${label}</div>`;
+          div.querySelector("select").addEventListener("change", (e) => onChange(e.target.value));
+          return div;
+        },
+        buildNumber(label, val, min, max, onChange) {
+          const div = document.createElement("div");
+          div.className = "account-edit-entry oa-input-wrapper";
+          div.innerHTML = `<input class="account-edit-entry__input" type="number" value="${val || 0}" ${min !== void 0 ? `min="${min}"` : ""} ${max !== void 0 ? `max="${max}"` : ""}><div class="account-edit-entry__label">${label}</div>`;
+          div.querySelector("input").addEventListener("change", (e) => {
+            let num = Number(e.target.value);
+            if (min !== void 0 && num < min) num = min;
+            if (max !== void 0 && num > max) num = max;
+            e.target.value = num;
+            onChange(num);
+          });
+          return div;
+        },
+        buildAsset(label, val, placeholder, onChange) {
+          const div = document.createElement("div");
+          div.className = "account-edit-entry oa-input-wrapper";
+          div.innerHTML = `
+          <input class="account-edit-entry__input" type="text" value="${val || ""}" placeholder="${placeholder || ""}">
+          <div class="account-edit-entry__label">${label}</div>
+          <div class="asset-error" style="color: #ff6666; font-size: 12px; margin-top: 4px; display: none;">Error: This image URL could not be loaded.</div>
+        `;
+          const inputEl = div.querySelector("input");
+          const errorEl = div.querySelector(".asset-error");
+          inputEl.addEventListener("input", (e) => {
+            const url = e.target.value;
+            if (!url) {
+              errorEl.style.display = "none";
+              onChange(url);
+              return;
+            }
+            const img = new Image();
+            img.onload = () => {
+              errorEl.style.display = "none";
+              onChange(url);
+            };
+            img.onerror = () => {
+              errorEl.style.display = "block";
+            };
+            img.src = url;
+          });
+          return div;
         }
       };
       const apiSection = uiHelper.buildSection("osu! API Credentials", true);
-      let clientIdVal = this.get("osu_client_id", "");
-      let clientSecretVal = this.get("osu_client_secret", "");
+      let clientIdVal = settings.get("osu_client_id", "");
+      let clientSecretVal = settings.get("osu_client_secret", "");
       const hasSecret = Boolean(clientSecretVal);
       apiSection.group.appendChild(uiHelper.buildInput("Client ID", "text", clientIdVal, "", (val) => clientIdVal = val));
       apiSection.group.appendChild(uiHelper.buildInput("Client Secret", "password", "", hasSecret ? "(saved \u2014 enter to change)" : "", (val) => clientSecretVal = val));
@@ -345,28 +382,18 @@
       apiActions.style.display = "flex";
       apiActions.style.gap = "10px";
       apiActions.innerHTML = `
-      <button class="btn-osu-big btn-osu-big--account-edit" id="oa-btn-save">
-        <div class="btn-osu-big__content">
-          <div class="btn-osu-big__left">Save & Verify</div>
-          <div class="btn-osu-big__icon"><i class="fas fa-check"></i></div>
-        </div>
-      </button>
-      <button class="btn-osu-big btn-osu-big--account-edit btn-osu-big--danger" id="oa-btn-clear">
-        <div class="btn-osu-big__content">
-          <div class="btn-osu-big__left">Clear</div>
-          <div class="btn-osu-big__icon"><i class="fas fa-trash"></i></div>
-        </div>
-      </button>
+      <button class="btn-osu-big btn-osu-big--account-edit" id="oa-btn-save"><div class="btn-osu-big__content"><div class="btn-osu-big__left">Save & Verify</div><div class="btn-osu-big__icon"><i class="fas fa-check"></i></div></div></button>
+      <button class="btn-osu-big btn-osu-big--account-edit btn-osu-big--danger" id="oa-btn-clear"><div class="btn-osu-big__content"><div class="btn-osu-big__left">Clear</div><div class="btn-osu-big__icon"><i class="fas fa-trash"></i></div></div></button>
     `;
       apiActions.querySelector("#oa-btn-save").addEventListener("click", () => {
-        if (clientIdVal) this.set("osu_client_id", clientIdVal);
-        if (clientSecretVal) this.set("osu_client_secret", clientSecretVal);
+        if (clientIdVal) settings.set("osu_client_id", clientIdVal);
+        if (clientSecretVal) settings.set("osu_client_secret", clientSecretVal);
         alert("OAuth Credentials Saved. Page will reload.");
         location.reload();
       });
       apiActions.querySelector("#oa-btn-clear").addEventListener("click", () => {
-        this.set("osu_client_id", "");
-        this.set("osu_client_secret", "");
+        settings.set("osu_client_id", "");
+        settings.set("osu_client_secret", "");
         alert("Credentials Cleared.");
         location.reload();
       });
@@ -374,9 +401,9 @@
       contentBox.appendChild(apiSection.section);
       const modulesSection = uiHelper.buildSection("Features");
       modules.forEach((mod) => {
-        const isModEnabled = this.isEnabled(mod.id);
+        const isModEnabled = settings.isEnabled(mod.id);
         const modToggle = uiHelper.buildToggle(mod.name, mod.description, isModEnabled, (checked) => {
-          this.setEnabled(mod.id, checked);
+          settings.setEnabled(mod.id, checked);
           if (customSettingsWrapper) customSettingsWrapper.style.display = checked ? "block" : "none";
         });
         modulesSection.group.appendChild(modToggle);
@@ -384,17 +411,14 @@
         if (mod.settings && mod.settings.length > 0) {
           customSettingsWrapper = document.createElement("div");
           customSettingsWrapper.className = "oa-module-settings";
+          customSettingsWrapper.style.display = isModEnabled ? "block" : "none";
           mod.settings.forEach((setting) => {
-            const val = this.getModuleSetting(mod.id, setting.id, setting.default);
-            if (setting.type === "checkbox") {
-              customSettingsWrapper.appendChild(uiHelper.buildToggle(setting.name, setting.description, val, (checked) => {
-                this.setModuleSetting(mod.id, setting.id, checked);
-              }));
-            } else {
-              customSettingsWrapper.appendChild(uiHelper.buildInput(setting.name, setting.type, val, setting.description, (newVal) => {
-                this.setModuleSetting(mod.id, setting.id, newVal);
-              }));
-            }
+            const val = settings.getModuleSetting(mod.id, setting.id, setting.default);
+            if (setting.type === "checkbox") customSettingsWrapper.appendChild(uiHelper.buildToggle(setting.name, setting.description, val, (c) => settings.setModuleSetting(mod.id, setting.id, c)));
+            else if (setting.type === "select") customSettingsWrapper.appendChild(uiHelper.buildSelect(setting.name, setting.options, val, (v) => settings.setModuleSetting(mod.id, setting.id, v)));
+            else if (setting.type === "number") customSettingsWrapper.appendChild(uiHelper.buildNumber(setting.name, val, setting.min, setting.max, (v) => settings.setModuleSetting(mod.id, setting.id, v)));
+            else if (setting.type === "asset") customSettingsWrapper.appendChild(uiHelper.buildAsset(setting.name, val, setting.description, (v) => settings.setModuleSetting(mod.id, setting.id, v)));
+            else customSettingsWrapper.appendChild(uiHelper.buildInput(setting.name, setting.type, val, setting.description, (v) => settings.setModuleSetting(mod.id, setting.id, v)));
           });
           modulesSection.group.appendChild(customSettingsWrapper);
         }
@@ -421,64 +445,48 @@
     name: "Add Waifu",
     description: "Add a waifu to the page.",
     settings: [
-      {
-        id: "waifu_url",
-        name: "Image URL",
-        description: "Enter the URL of the waifu image.",
-        type: "text",
-        default: "https://catbox.moe/pictures/qts/1458438424722.png"
-      },
-      {
-        id: "waifu_size",
-        name: "Image Size",
-        description: 'Set the width of the waifu image (e.g. "150px" or "auto").',
-        type: "text",
-        default: "auto"
-      },
-      {
-        id: "waifu_bottom_offset",
-        name: "Bottom Offset",
-        description: 'Set the bottom offset of the waifu image (e.g. "10px").',
-        type: "text",
-        default: "0px"
-      },
-      {
-        id: "waifu_right_offset",
-        name: "Right Offset",
-        description: 'Set the right offset of the waifu image (e.g. "10px").',
-        type: "text",
-        default: "48px"
-      }
+      { id: "waifu_url", name: "Image URL", description: "Enter a valid image URL.", type: "text", default: "https://catbox.moe/pictures/qts/1458438424722.png" },
+      { id: "waifu_size", name: "Image Size (px)", type: "number", min: 50, max: 800, default: 250 },
+      { id: "waifu_bottom_offset", name: "Bottom Offset (px)", type: "number", default: 0 },
+      { id: "waifu_right_offset", name: "Right Offset (px)", type: "number", default: 0 }
     ],
     init() {
-      router.onNavigate("*", () => this.run());
       GM_addStyle(`
-      #waifu-container {
-        position: fixed;
-        z-index: 9999;
-        pointer-events: none;
-      }
+      .waifu-container-ui { position: fixed; z-index: 9999; pointer-events: none; }
     `);
-    },
-    async run() {
-      setTimeout(() => {
-        requestAnimationFrame(() => {
-          const targetUrl = settings.getModuleSetting(this.id, "waifu_url", "https://catbox.moe/pictures/qts/1458438424722.png");
-          if (!targetUrl) return;
-          const waifuContainer = document.createElement("div");
-          waifuContainer.id = "waifu-container";
-          waifuContainer.style.right = settings.getModuleSetting(this.id, "waifu_right_offset", "48px");
-          ;
-          waifuContainer.style.bottom = settings.getModuleSetting(this.id, "waifu_bottom_offset", "0px");
+      settings.onChange(this.id, () => this.updateRender());
+      setInterval(() => {
+        let container = document.getElementById("oa-waifu-container");
+        if (!container) {
+          container = document.createElement("div");
+          container.id = "oa-waifu-container";
+          container.className = "waifu-container-ui";
           const waifuImg = document.createElement("img");
-          waifuImg.src = targetUrl;
+          waifuImg.id = "oa-waifu-img";
           waifuImg.style.height = "auto";
-          waifuImg.style.width = settings.getModuleSetting(this.id, "waifu_size", "auto");
-          ;
-          waifuContainer.appendChild(waifuImg);
-          document.body.appendChild(waifuContainer);
-        });
-      }, 25);
+          container.appendChild(waifuImg);
+          document.documentElement.appendChild(container);
+          this.updateRender();
+        }
+      }, 250);
+    },
+    updateRender() {
+      const container = document.getElementById("oa-waifu-container");
+      const img = document.getElementById("oa-waifu-img");
+      if (!container || !img) return;
+      const targetUrl = settings.getModuleSetting(this.id, "waifu_url", "https://catbox.moe/pictures/qts/1458438424722.png");
+      if (!targetUrl) {
+        container.style.display = "none";
+        return;
+      }
+      container.style.display = "block";
+      const size = settings.getModuleSetting(this.id, "waifu_size", 250);
+      const right = settings.getModuleSetting(this.id, "waifu_right_offset", 0);
+      const bottom = settings.getModuleSetting(this.id, "waifu_bottom_offset", 0);
+      container.style.right = `${right}px`;
+      container.style.bottom = `${bottom}px`;
+      img.style.width = `${size}px`;
+      img.src = targetUrl;
     }
   };
 
@@ -899,23 +907,62 @@
     description: "Set a custom background.",
     settings: [
       { id: "custom_bg", name: "Image URL", type: "text", default: "" },
-      { id: "custom_bg_opacity", name: "Opacity", type: "text", default: "0.2" }
+      { id: "custom_bg_opacity", name: "Opacity", type: "text", default: "0.2" },
+      // { id: 'custom_bg_translucent_page', name: 'Backdrop Opacity', type: 'text', default: '1' },
+      { id: "custom_bg_hide_header", name: "Hide Header Background", type: "checkbox", default: true }
     ],
     init() {
-      const bg = settings.getModuleSetting(this.id, "custom_bg", "");
+      const bgUrl = settings.getModuleSetting(this.id, "custom_bg", "");
       const op = settings.getModuleSetting(this.id, "custom_bg_opacity", "0.2");
-      if (bg) {
+      const hideHeader = settings.getModuleSetting(this.id, "custom_bg_hide_header", true);
+      if (!bgUrl) return;
+      const injectBackground = (workingUrl) => {
         GM_addStyle(`
         body::before { 
           content: ""; 
           position: fixed; 
           inset: 0; 
           z-index: -1; 
-          background: url("${bg}") center/cover fixed; 
+          background: url("${workingUrl}") center/cover fixed; 
           opacity: ${op}; 
         }
       `);
-      }
+        if (hideHeader) {
+          GM_addStyle(`
+          .header-v4__bg-container, .nav2-header__triangles {
+            display: none;
+          }
+        `);
+        }
+      };
+      const bg = new Image();
+      bg.onload = () => {
+        console.log("[Custom Background] Image loaded normally.");
+        injectBackground(bgUrl);
+      };
+      bg.onerror = () => {
+        console.log("[Custom Background] Normal load blocked, loading image with blob fallback.");
+        GM_xmlhttpRequest({
+          method: "GET",
+          url: bgUrl,
+          responseType: "blob",
+          onload: function(response) {
+            if (response.status >= 200 && response.status < 300) {
+              const reader = new FileReader();
+              reader.onloadend = function() {
+                injectBackground(reader.result);
+              };
+              reader.readAsDataURL(response.response);
+            } else {
+              console.error(`[Custom Background] Fallback failed with status: ${response.status}`);
+            }
+          },
+          onerror: function(err) {
+            console.error("[Custom Background] What:", err);
+          }
+        });
+      };
+      bg.src = bgUrl;
     }
   };
 
@@ -946,7 +993,7 @@
     description: "Attempts to use mapset thumbnail as a fallback image if the background does not exist.",
     init() {
       router.onNavigate("/beatmapsets/*", () => this.runOnSetPage());
-      panelManager.register((panel) => this.processPanel(panel));
+      elementManager.register(".beatmapset-panel", (panel) => this.processPanel(panel));
     },
     async runOnSetPage() {
       const cover = await waitForElement(".beatmapset-header__cover .beatmapset-cover");
@@ -974,8 +1021,8 @@
   // src/main.js
   var _modules = Object.values(modules_exports);
   beatmapsetData.init();
-  panelManager.init();
-  settings.createSettingsUI(_modules);
+  elementManager.init();
+  settingsUI.create(_modules);
   _modules.forEach((m) => {
     if (settings.isEnabled(m.id)) {
       m.init();

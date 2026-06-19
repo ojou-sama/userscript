@@ -8,7 +8,7 @@ export default {
     author: "ojou-sama",
     description: "A collection of small scripts for osu! web.",
     match: [ "https://osu.ppy.sh/*" ],
-    grant: [ "GM_addStyle", "GM_getValue", "GM_setValue", "GM_deleteValue" ],
+    grant: [ "GM_addStyle", "GM_getValue", "GM_setValue", "GM_deleteValue", "GM_xmlhttpRequest" ],
     connect: [ "assets.ppy.sh", "b.ppy.sh" ],
     // include: [],
     // icon: "",

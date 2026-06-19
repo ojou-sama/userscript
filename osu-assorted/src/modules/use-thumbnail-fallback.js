@@ -1,5 +1,5 @@
 // import { beatmapsetData } from '../core/beatmapset-data';
-import { panelManager } from '../core/panel-manager';
+import { elementManager } from '../core/element-manager';
 import { router } from '../core/router';
 import { waitForElement } from '../core/utils';
 
@@ -10,7 +10,7 @@ export const useThumbnailFallback = {
 
   init() {
     router.onNavigate('/beatmapsets/*', () => this.runOnSetPage());
-    panelManager.register(panel => this.processPanel(panel));
+    elementManager.register('.beatmapset-panel', (panel) => this.processPanel(panel));
   },
 
   async runOnSetPage() {
